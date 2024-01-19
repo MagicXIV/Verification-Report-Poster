@@ -1,0 +1,308 @@
+---
+title: "Verification report of Jurek, Niewiadomska & Szot"
+author: "Jasmijn Bazen & Florian Metwaly"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(mediation)
+library(gtsummary)
+library(bruceR)
+```
+
+Downloading the data needs the *inborutils* package which is not available on CRAN, therefore is directly downloaded from GitHub. The devtools package is needed to do this, if you dont have devtool installed, first install it with install.packages("devtools")
+```{r}
+devtools::install_github("inbo/inborutils") # only needs to be run the first time!
+library(inborutils)
+```
+
+# Download and Load Data and Filter Cases
+
+```{r}
+save_dir <- getwd() # directory in which the data should be saved
+download_zenodo(doi = "10.5281/zenodo.8088147", path = save_dir)
+```
+
+Alternatively, the data can be downloaded under this [link](https://zenodo.org/records/8088147). If you download the data manually, save it in your working directory.
+
+```{r}
+data <- read_excel("all_data_COVID19.xlsx")
+```
+
+Multiple item responses in the dataset are coded with “999”, as there is no further documentation, the assumption that those cases are missing data was made and coded respectively.
+```{r}
+data[data == 999] <- NA
+```
+
+The full dataset contains 725 observations. In their paper the authors report the collection of 411 questionnaires (Jurek, et al., 2023. p. 8), there is no explanation of where the additional 314 observations come from. A deletion of missing cases did not lead to the reported 238 correctly completed questionnaires (Jurek, et al., 2023. p. 8).
+```{r}
+data_nomiss <- na.omit(data)
+# -> 642 observations, therefore not the 238 study cases.
+```
+
+
+The data needs to be filtered for the individuals with the correct profession. There is no adequate documentation of that, but through exploration of the variables we found that 238 observations are coded with 1 in the profession variable (possible coding: 0, 1). This number also is the number the authors mentioned when talking about "correctly completed" studies (p. 8). Therefore we assume that filtering for those is necessary:
+```{r}
+sum(data$profession)
+
+data_study <- data %>%
+  filter(profession == 1)
+```
+# Variable Exploration
+As there is no codebook provided by the authors, we need to first figure out all relevant variables and their codings.
+
+## Variable: gender
+```{r}
+unique(data_study$gender)
+sum(data_study$gender)/238
+```
+This shows that 1 in the gender variable is female, while 0 is male, as the proportion of 73,1 matches the descriptive given in the paper (p. 8)
+
+## Variable: profession_x 
+```{r}
+data_study %>% select(profession_1, profession_2, profession_3, profession_4, profession_5, profession_6, profession_7, profession_8, profession_other) %>%
+  summarise_all(sum, na.rm = TRUE)
+
+data_study %>% select(profession_1, profession_2, profession_3, profession_4, profession_5, profession_6, profession_7, profession_8, profession_other) %>%
+  summarise_all(is.na) %>%
+  summarise_all(sum)
+# one missing in profession_5 -> no further steps mentioned by the authors
+
+# 1 = 14
+# 2 = 155 -> Health professionals
+# 3 = 45 -> Firefighters
+# 4 = 27 -> Soldiers
+# 5 = 11 -> Policemen
+# 6 = 2
+# 7 = 0
+# 8 = 44
+# other = 5
+
+155 + 45 + 27 + 11 # 238, there is no report about the other professions
+```
+The professions without a name were not described in the paper nor in the participants demographic excel sheet. 
+
+As can be seen, the some participants have multiple professions. This results in an inability to make a composite variable. We will thus keep the original way of analyzing it across variables (profession_2 up to and including profession_5). 
+
+## Variable: place
+
+```{r}
+data_study %>% select(place) %>%
+  group_by(place) %>%
+  summarise(count_N = sum(!is.na(place)))
+
+sum(is.na(data_study$place)) # 1 missing
+
+# 1 = 74 -> village
+# 2 = 12 -> city of up to 5,000 residents
+# 3 = 23 -> city of 5,000-20 000 residents
+# 4 = 51 -> city of 21,000-50 000 residents
+# 5 = 21 -> city of  51 000-100 000
+# 6 = 56 -> city of more than 100.000
+
+12+23+51+21+56 # = 163 -> all Urban Area, the authors report 164 observations, therefore they probably coded the one missing value also as "Urban Area", without reporting it
+
+# for the replication we do the same 
+data_study$place[is.na(data_study$place)] <- 7 # 7 to give it its own category to not mess with the other categories
+
+```
+
+We assume that only the village is considered a rural area. Thus, data_study$place = 1 is considered rural area, while all other values are coded as urban area. 
+Problematic is, that the authors coded the missing value as "Urban Area" without reporting it.
+
+## Variable: educ
+```{r}
+data_study %>% select(educ) %>%
+  group_by(educ) %>%
+  summarise(count_N = sum(!is.na(educ)))
+
+sum(is.na(data_study$educ))
+
+# 3 = Vocational
+# 4 = Secondary
+# 5 = Higher
+```
+
+```{r}
+# figure out marital
+data_study %>% select(marital) %>%
+  group_by(marital) %>%
+  summarise(count_N = sum(!is.na(marital)))
+
+sum(is.na(data_study$marital))
+
+# 1 = Single                  #50
+# 2 = In marriage             #144
+# 3 = Separated               #5
+# 4 = In a free relationship  #13
+# 5 = Divorced                #14
+# 6 = Widow/widower           #12
+
+50+5+13+14+12 # = 94 -> all those are category Single/divorced/widowed
+```
+
+# Replication: Table 1 - Participant demographics
+```{r}
+# first, recode all factor variables
+data_study$gender <- factor(data_study$gender,
+                         levels = c("0", "1"),
+                         labels = c("Men", "Women"))
+
+data_study$educ <- factor(data_study$educ,
+                       levels = c("3", "4", "5"),
+                       labels = c("Vocational", "Secondary", "Married"))
+
+data_study$marital <- factor(data_study$marital,
+                          levels = c(1, 2,3, 4, 5, 6),
+                          labels = c("Single/divorced/widowed", "Married", "Single/divorced/widowed", "Single/divorced/widowed", "Single/divorced/widowed", "Single/divorced/widowed"))
+
+data_study$place <- factor(data_study$place,
+                        levels = c(1, 2, 3, 4, 5, 6, 7),
+                        labels = c("Rural Area", "Urban Area", "Urban Area", "Urban Area", "Urban Area", "Urban Area", "Urban Area"))
+
+# create sub dataset for Table 1
+data_t1 <- data_study %>%
+  dplyr::select(gender, age, seniority, profession_2, profession_3, profession_4, profession_5, educ, marital, place)
+```
+
+```{r}
+tbl_summary(data_t1,
+            statistic = list(
+              c(gender, educ, marital, place) ~ "{n} ({p}%)",
+              c(profession_2, profession_3, profession_4, profession_5) ~ "{n} ({p}%)",
+              c(age, seniority) ~ "{mean} ({sd})"),
+            digits = c(age, seniority) ~ 2,
+            missing_text = "Missing Values",
+            label = list(
+              gender ~ "Gender",
+              age ~ "Age",
+              seniority ~ "Seniority",
+              profession_2 ~ "Health Professionals",
+              profession_3 ~ "Firefighters",
+              profession_4 ~ "Soldiers",
+              profession_5 ~ "Policemen",
+              educ ~ "Education",
+              marital ~ "Marital Status",
+              place ~ "Place of Residence")
+            )
+```
+
+To completely replicate Table 1, all categories were counted in each variable and compared with the results presented in Table 1 of the original paper. Our demographics table contained the same percentages and sample sizes as in the paper. However, they did not include missing variables in their table or give any further information about the appearance or treatment of missing values. 
+
+# Models
+To create the mediation models, the author used PROCESS software (Jurek, et al., 2023. p. 9). PROCESS software was developed by Andrew F. Hayes and is a software “that implements moderation or mediation analysis as well as their combination in an integrated conditional process model (i.e., mediated moderation and moderated mediation)” (Hayes, 2012. p. 11). Software by Hayes is available for SPSS, SAS and R. The R implementation did not happen through a package, but through a script published by Hayes (https://www.processmacro.org/index.html). As the installation and usage of the official PROCESS macros are more complicated, in this replication the bruceR package is used to perform the mediation analysis. bruceR combines the functions of multiple established packages used for mediation (mediation, interactions, lavaan (Long, 2019; Rosseel, 2012; Tingley, 2014)) and implements PROCESS syntax, in an easy to use way (Bao, 2023).
+In Figure 3 PROCESS Model 4 is applied, which investigates the relationship between hopelessness and job satisfaction with turning to religion as a mediator. In Figure 4 the authors use PROCESS Model 14 to perform a moderated mediation analysis with the variable gender as a moderator between turning to religion and job satisfaction.
+
+## Find Variables
+```{r}
+# job satisfaction
+# found through model overview provided by authors: satisfaction_job
+mean(data_study$satisfaction_job, na.rm = TRUE) # 3.48
+sd(data_study$satisfaction_job, na.rm = TRUE) # 0.83
+```
+
+```{r}
+# turning to religion
+data_study %>% select(MCOPE_S_1, MCOPE_S_2, MCOPE_S_3, MCOPE_S_4, MCOPE_S_5, MCOPE_S_6, MCOPE_S_7, MCOPE_S_8, MCOPE_S_9, MCOPE_S_10, MCOPE_S_11, MCOPE_S_12, MCOPE_S_13, MCOPE_S_14) %>%
+  summarise_all(mean, na.rm = TRUE)
+
+# MCOPE_S_6
+mean(data_study$MCOPE_S_6, na.rm = TRUE) # 1.789
+sd(data_study$MCOPE_S_6, na.rm = TRUE) # 0.716
+# -> not same as reported in the study
+
+# it must be MCOPE_S_6, because then the correlations are correct, but the mean and SD are not correct. Also when listing the coping mechanisms, they mention coping with religion as 6th, and its likely they listed them in the same order as the MCOPE variable lists them.
+```
+
+```{r}
+# hopelessness
+# found through model overview provided by authors: HS_WO
+mean(data_study$HS_WO, na.rm = TRUE) # 5.9 
+sd(data_study$HS_WO, na.rm = TRUE) # 4.19
+# -> not same as reported in the study
+```
+For turning to religion the authors reported a mean of 1.4 with a SD of 0.9, the replication produced a mean of 1.79 and a SD of 0.72. For the hopelessness variable the authors reported a mean of 7.9 and a SD of 4.2, the replication resulted in a mean of 5.9 and a SD of 4.19. It was not possible to find the reason for those discrepancies and the authors did not report any further data processing!
+
+## Replication: Table 2 - Pearson r correlations between the study variables
+```{r}
+data_t2 <- data.frame(satisfaction_job = data_study$satisfaction_job, 
+                      MCOPE_S_6 = data_study$MCOPE_S_6, 
+                      HS_WO = data_study$HS_WO) %>%
+  na.omit() # omit NA to be able to calculate correlations
+(rep_t2 <- cor(data_t2))
+
+# correlations are coherent with the ones in the paper
+```
+
+```{r}
+# calculate p-values
+cor.test(data_t2$satisfaction_job, data_t2$HS_WO)[3] 
+cor.test(data_t2$satisfaction_job, data_t2$MCOPE_S_6)[3] 
+cor.test(data_t2$MCOPE_S_6, data_t2$HS_WO)[3] 
+
+# p-values are coherent with the ones in the paper
+```
+Even though there were discrepancies in the descriptive statistics of two of the three variables (*MCOPE_S_6*, *HS_WO*), the replication of Table 2, the replication of the Pearson r correlations between the three variables, resulted in the same results. For all three correlations the significance values were only reported in the ranges * = <0.05, ** = <0.01 and *** which was not further defined, but can be assumed to be <0.001. Given this assumption, the “reported” p-values match the replication. There are greater discrepancies in the means and SD’s for the turning to religion and the hopelessness variables.
+
+## Replication: Fig 3 - Model of relationships between hopelessness, turning to religion, and job satisfaction - PROCESS Model 4
+
+Following an overview over the used variables and their conventional symbol:
+- X (Predictor) = hopelessness -> data_study$HS_WO
+- Y (Outcome) = job satisfaction -> data_study$satisfaction_job
+- M (Mediator) = turning to religion -> data_study$MCOPE_S_6
+- W (Moderator) = gender -> data_study$gender
+
+The authors did not mention listwise deletion of missing values. In their model overview they report a sample size of 238 for every model. The models do not work without listwise deletion of missing cases, therefore they reported a wrong sample size for the models.
+
+```{r}
+# normal model
+PROCESS(data_study, y = "satisfaction_job", 
+        x = "HS_WO", 
+        meds = "MCOPE_S_6", # mediator variable
+        ci = "boot", # calculating BootCI's
+        center = FALSE, # turn off automatic grand mean centering, 
+        # which is default in this package
+        digits = 4, # number of displayed digits
+        nsim = 5000, # number of sims as given by the authors
+        seed = 1337) # seed for replicability 
+```
+
+In their model overview (excel file in the appendix), the authors report the standartized coefficients. Although those are not in the paper, following they are also replicated:
+```{r}
+# run second time to get standartized coefficients
+PROCESS(data_study, y = "satisfaction_job", 
+        x = "HS_WO", 
+        meds = "MCOPE_S_6",
+        ci = "boot",
+        digits = 4,
+        center = FALSE,
+        std = TRUE, # bc they give standardized coefficients in the model overview
+        nsim = 5000,
+        seed = 1337)
+```
+Replicating the standartized coefficients found the same result as reported by the authors.
+
+## Replication: Fig 4 - The moderation effects of gender in the relationships between hopelessness, turning to religion, and job satisfaction - PROCESS Model 14
+```{r}
+PROCESS(data_study, y = "satisfaction_job", 
+        x = "HS_WO", 
+        meds = "MCOPE_S_6",
+        mods = "gender",
+        mod.path = "m-y",
+        ci = "boot",
+        center = FALSE,
+        digits = 4,
+        nsim = 5000,
+        seed = 1337)
+```
+# Sources
+For list of sources, see poster
