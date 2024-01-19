@@ -34,3 +34,6 @@ The outcomes of the models: https://zenodo.org/records/8088147/files/model%204%2
 
 ## CREDITS
 We would like to thank Anne Scheel for contributing to this project. She has helped us choose what article was best suited and was always there for us whenever we needed help.
+
+## GITHUB
+The link to a Github page with the replication script, poster, README file and codebook can be found at: https://github.com/MagicXIV/Verification-Report-Poster 
