@@ -6,7 +6,8 @@ By Florian Metwaly and Jasmijn Bazen
 ## RELEVANT FILES
 **all_data_COVID19.xlsx** - This is the dataset constaining all data.
 **Replication_Script_JBazen_FMetwaly.Rmd** - This is the R script including annotations on the verification of the article. 
-### Optional files: 
+### Optional files:
+**Multivariate_Poster_JBazen_FMetwaly.pdf** - This is a scientific poster explaining in short what was done in this project.
 **Codebook.pdf** - This file includes the codebook with all relevant codes for the Rmarkdown file in order and their respective meanings. 
 **model 4 & 14.xlsx** - This file includes all outcomes of the moderation/mediation models provided by the authors. Including coefficients, standard errors, t- and p-values, and upper and lowerbound 95% bootstrapped confidence intervals.
 **Participant Demographics.xlsx** - Information on the participant demographics (seniority, gender, marital status, education, place of residence and profession)
